@@ -1,35 +1,50 @@
 ﻿using System;
 using System.Diagnostics;
+using static Game;
 
 public interface IGame
 {
     void StartGame();
     void PlaySudoku(int[,] board);
+    void MainMenu();
 }
 
 public interface IBoardGenerator
 {
     int[,] GenerateSudoku(string difficulty);
     int[,] GenerateFullSudoku();
+    bool IsValidMove(int[,] board, int row, int col, int num); // Добавлен метод
+    bool IsRowFilled(int[,] board, int row); // Добавлен метод
+    bool IsColumnFilled(int[,] board, int col); // Добавлен метод
+    bool IsBoxFilled(int[,] board, int startRow, int startCol); // Добавлен метод
 }
 
 public class Program
 {
-    static Random rand = new Random();
     static void Main(string[] args)
     {
-        Game game = new Game();
+        IBoardGenerator boardGenerator = new BoardGenerator();
+        IGame game = new Game(boardGenerator);
         game.MainMenu();
     }
 }
 
-public class Game 
+
+public class Game : IGame
 {
+    private string difficulty;
     private static Random rand = new Random();
     private int[,] originalBoard;
     private int[,] currentBoard;
     private int mistakes;
     private int maxAllowedMistakes = 3;
+
+    private readonly IBoardGenerator _boardGenerator;
+
+    public Game(IBoardGenerator boardGenerator)
+    {
+        _boardGenerator = boardGenerator;
+    }
 
     public void MainMenu()
     {
@@ -40,7 +55,8 @@ public class Game
             Console.WriteLine("Добро пожаловать в игру Судоку!");
             Console.WriteLine("1. Начать игру");
             Console.WriteLine("2. О разработчике");
-            Console.WriteLine("3. Выйти из программы");
+            Console.WriteLine("3. Топ 3 результата");
+            Console.WriteLine("4. Выйти из программы");
 
             string choice = Console.ReadLine();
 
@@ -53,6 +69,9 @@ public class Game
                     DeveloperInfo();
                     break;
                 case "3":
+                    DisplayTop3Results(); 
+                    break;
+                case "4":
                     ExitGame();
                     break;
                 default:
@@ -86,151 +105,170 @@ public class Game
         Console.WriteLine("3. Сложная");
 
         string difficulty = Console.ReadLine();
-        originalBoard = GenerateSudoku(difficulty); // Generate the Sudoku board based on difficulty
+        originalBoard = _boardGenerator.GenerateSudoku(difficulty); // Generate the Sudoku board based on difficulty
         currentBoard = (int[,])originalBoard.Clone(); // Clone original board for gameplay
         PlaySudoku(currentBoard); // Pass the current board to PlaySudoku
     }
 
-    private int[,] GenerateSudoku(string difficulty)
+    public class BoardGenerator : IBoardGenerator
     {
-        int[,] board = GenerateFullSudoku();
+        private Random rand = new Random();
 
-        switch (difficulty)
+        public int[,] GenerateSudoku(string difficulty)
         {
-            case "1":
-                Console.WriteLine("Выбрана простая сложность.");
-                RemoveNumbersWithSolutionCheck(board, 10);
-                break;
-            case "2":
-                Console.WriteLine("Выбрана средняя сложность.");
-                RemoveNumbersWithSolutionCheck(board, 20);
-                break;
-            case "3":
-                Console.WriteLine("Выбрана сложная сложность.");
-                RemoveNumbersWithSolutionCheck(board, 30);
-                break;
-            default:
-                Console.WriteLine("Неверный выбор сложности.");
-                StartGame();
-                break;
+            int[,] board = GenerateFullSudoku();
+            int removeCount = difficulty switch
+            {
+                "1" => 10,
+                "2" => 20,
+                "3" => 30,
+                _ => throw new ArgumentException("Неверный выбор сложности.")
+            };
+
+            RemoveNumbersWithSolutionCheck(board, removeCount);
+            return board;
         }
 
-        return board;
-    }
+        public int[,] GenerateFullSudoku()
+        {
+            int[,] board = new int[9, 9];
+            FillBoard(board);
+            return board;
+        }
 
-    private int[,] GenerateFullSudoku()
-    {
-        int[,] board = new int[9, 9];
-        FillBoard(board);
-        return board;
-    }
+        public bool IsValidMove(int[,] board, int row, int col, int num)
+        {
+            for (int x = 0; x < 9; x++)
+            {
+                if (board[row, x] == num || board[x, col] == num ||
+                    board[row - row % 3 + x / 3, col - col % 3 + x % 3] == num)
+                    return false;
+            }
+            return true;
+        }
 
-    private bool FillBoard(int[,] board)
-    {
-        for (int row = 0; row < 9; row++)
+        public bool IsRowFilled(int[,] board, int row)
         {
             for (int col = 0; col < 9; col++)
-            {
                 if (board[row, col] == 0)
-                {
-                    int[] numbers = ShuffleNumbers();
-
-                    foreach (int num in numbers)
-                    {
-                        if (IsValidMove(board, row, col, num))
-                        {
-                            board[row, col] = num;
-
-                            if (FillBoard(board))
-                                return true;
-                            else
-                                board[row, col] = 0;
-                        }
-                    }
-
                     return false;
+            return true;
+        }
+
+        public bool IsColumnFilled(int[,] board, int col)
+        {
+            for (int row = 0; row < 9; row++)
+                if (board[row, col] == 0)
+                    return false;
+            return true;
+        }
+
+        public bool IsBoxFilled(int[,] board, int startRow, int startCol)
+        {
+            for (int row = 0; row < 3; row++)
+                for (int col = 0; col < 3; col++)
+                    if (board[startRow + row, startCol + col] == 0)
+                        return false;
+            return true;
+        }
+
+        public bool FillBoard(int[,] board)
+        {
+            for (int row = 0; row < 9; row++)
+            {
+                for (int col = 0; col < 9; col++)
+                {
+                    if (board[row, col] == 0)
+                    {
+                        int[] numbers = ShuffleNumbers();
+                        foreach (int num in numbers)
+                        {
+                            if (IsValidMove(board, row, col, num))
+                            {
+                                board[row, col] = num;
+                                if (FillBoard(board))  // Рекурсивный вызов
+                                    return true;
+
+                                board[row, col] = 0;  // Откат изменений
+                            }
+                        }
+                        return false;  // Если не удалось заполнить текущую ячейку
+                    }
+                }
+            }
+            return true;  // Если вся доска заполнена
+        }
+
+        public void RemoveNumbersWithSolutionCheck(int[,] board, int amountToRemove)
+        {
+            int removed = 0;
+            while (removed < amountToRemove)
+            {
+                int row = rand.Next(0, 9);
+                int col = rand.Next(0, 9);
+
+                if (board[row, col] != 0)
+                {
+                    int backup = board[row, col];
+                    board[row, col] = 0;
+
+                    if (HasUniqueSolution(board))
+                        removed++;
+                    else
+                        board[row, col] = backup;
                 }
             }
         }
-        return true;
-    }
 
-    private int[] ShuffleNumbers()
-    {
-        int[] numbers = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-        for (int i = 0; i < numbers.Length; i++)
+        private bool HasUniqueSolution(int[,] board)
         {
-            int j = rand.Next(i, numbers.Length);
-            int temp = numbers[i];
-            numbers[i] = numbers[j];
-            numbers[j] = temp;
+            int[,] copy = (int[,])board.Clone();
+            int solutions = 0;
+            SolveSudoku(copy, ref solutions);
+            return solutions == 1;
         }
-        return numbers;
-    }
 
-    private void RemoveNumbersWithSolutionCheck(int[,] board, int amountToRemove)
-    {
-        int removed = 0;
-        while (removed < amountToRemove)
+        private bool SolveSudoku(int[,] board, ref int solutions, int row = 0, int col = 0)
         {
-            int row = rand.Next(0, 9);
-            int col = rand.Next(0, 9);
+            if (solutions > 1) return false;
+            if (row == 9)
+            {
+                solutions++;
+                return solutions == 1;
+            }
+
+            if (col == 9)
+                return SolveSudoku(board, ref solutions, row + 1, 0);
 
             if (board[row, col] != 0)
-            {
-                int backup = board[row, col];
-                board[row, col] = 0;
+                return SolveSudoku(board, ref solutions, row, col + 1);
 
-                // Проверяем, осталась ли у доски только одно решение
-                if (HasUniqueSolution(board))
+            for (int num = 1; num <= 9; num++)
+            {
+                if (IsValidMove(board, row, col, num))
                 {
-                    removed++;
-                }
-                else
-                {
-                    board[row, col] = backup; // Восстанавливаем если нет уникального решения
+                    board[row, col] = num;
+                    if (SolveSudoku(board, ref solutions, row, col + 1))
+                        return true;
+                    board[row, col] = 0;
                 }
             }
-        }
-    }
 
-    private bool HasUniqueSolution(int[,] board)
-    {
-        int[,] copy = (int[,])board.Clone();
-        int solutions = 0;
-        SolveSudoku(copy, ref solutions);
-        return solutions == 1;
-    }
-
-    private bool SolveSudoku(int[,] board, ref int solutions, int row = 0, int col = 0)
-    {
-        if (solutions > 1) return false; // Если нашли более одного решения, выходим
-
-        if (row == 9)
-        {
-            solutions++;
-            return solutions == 1; // Возвращаем true только при первом решении
+            return false;
         }
 
-        if (col == 9)
-            return SolveSudoku(board, ref solutions, row + 1, 0);
-
-        if (board[row, col] != 0)
-            return SolveSudoku(board, ref solutions, row, col + 1);
-
-        for (int num = 1; num <= 9; num++)
+        private int[] ShuffleNumbers()
         {
-            if (IsValidMove(board, row, col, num))
+            int[] numbers = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+            for (int i = 0; i < numbers.Length; i++)
             {
-                board[row, col] = num;
-                if (SolveSudoku(board, ref solutions, row, col + 1))
-                    return true; // Если найдено одно решение, продолжаем
-                board[row, col] = 0;
+                int j = rand.Next(i, numbers.Length);
+                (numbers[i], numbers[j]) = (numbers[j], numbers[i]);
             }
+            return numbers;
         }
-
-        return false;
     }
+
 
     public void PlaySudoku(int[,] board)
     {
@@ -238,7 +276,7 @@ public class Game
         Stopwatch timer = new Stopwatch();
         timer.Start();
 
-        while (mistakes < 3)
+        while (mistakes < maxAllowedMistakes)
         {
             Console.Clear();
             PrintBoard(board);
@@ -259,7 +297,7 @@ public class Game
             Console.WriteLine("Введите цифру (1-9):");
             int num = GetValidNumber();
 
-            if (IsValidMove(board, x, y, num))
+            if (_boardGenerator.IsValidMove(board, x, y, num))
             {
                 board[x, y] = num;
                 NotifyExtraMistake(board, x, y);
@@ -267,7 +305,7 @@ public class Game
             else
             {
                 mistakes++;
-                Console.WriteLine($"Ошибка! Осталось попыток: {3 - mistakes}");
+                Console.WriteLine($"Ошибка! Осталось попыток: {maxAllowedMistakes - mistakes}");
                 Console.ReadKey();
             }
 
@@ -276,17 +314,53 @@ public class Game
                 timer.Stop();
                 Console.Clear();
                 PrintBoard(board);
+
                 Console.WriteLine($"Поздравляем! Вы прошли игру за {timer.Elapsed.TotalSeconds} секунд с {mistakes} ошибками.");
+                SaveResult(difficulty, timer.Elapsed.TotalSeconds);
                 Console.ReadKey();
                 MainMenu();
             }
         }
 
-        Console.WriteLine("Конец игры! Вы допустили 3 ошибки.");
+        Console.WriteLine($"Конец игры! Вы допустили {maxAllowedMistakes} ошибки.");
         timer.Stop();
         Console.WriteLine($"Время: {timer.Elapsed.TotalSeconds} секунд.");
         Console.ReadKey();
         MainMenu();
+    }
+
+    private void SaveResult(string difficulty, double time)
+    {
+        string result = $"{difficulty} | {time:F2} | {DateTime.Now}";
+        File.AppendAllText("results.txt", result + Environment.NewLine);
+        Console.WriteLine("Результат сохранен.");
+    }
+
+    private void DisplayTop3Results()
+    {
+        if (!File.Exists("results.txt"))
+        {
+            Console.WriteLine("Нет данных о прохождениях.");
+            return;
+        }
+
+        var results = File.ReadAllLines("results.txt")
+            .Select(line => line.Split('|').Select(part => part.Trim()).ToArray())
+            .Select(parts => new { Difficulty = parts[0], Time = double.Parse(parts[1]), Date = parts[2] })
+            .GroupBy(r => r.Difficulty)
+            .Select(g => new { Difficulty = g.Key, TopResults = g.OrderBy(r => r.Time).Take(3) });
+
+        foreach (var difficultyGroup in results)
+        {
+            Console.WriteLine($"\nТоп-3 прохождений для сложности: {difficultyGroup.Difficulty}");
+            foreach (var result in difficultyGroup.TopResults)
+            {
+                Console.WriteLine($"Время: {result.Time:F2} сек | Дата: {result.Date}");
+            }
+        }
+
+        Console.WriteLine("\nНажмите любую клавишу для возврата в меню.");
+        Console.ReadKey();
     }
 
     private int GetValidCoordinate()
@@ -310,24 +384,24 @@ public class Game
     {
         bool extraChanceGiven = false;
 
-        if (IsRowFilled(board, row))
+        if (_boardGenerator.IsRowFilled(board, row))
         {
             maxAllowedMistakes++;
             Console.WriteLine("Получена дополнительная попытка за заполнение строки!");
-            extraChanceGiven = true;
+            extraChanceGiven = true;,
         }
 
-        if (IsColumnFilled(board, col))
+        if (_boardGenerator.IsColumnFilled(board, col))
         {
             maxAllowedMistakes++;
             Console.WriteLine("Получена дополнительная попытка за заполнение столбца!");
             extraChanceGiven = true;
         }
 
-        if (IsBoxFilled(board, row - row % 3, col - col % 3))
+        if (_boardGenerator.IsBoxFilled(board, row - row % 3, col - col % 3))
         {
             maxAllowedMistakes++;
-            Console.WriteLine("Получена дополнительная попытка за заполнение 3x3 квадрата!");
+            Console.WriteLine("Получена дополнительная попытка за заполнение квадрата 3x3!");
             extraChanceGiven = true;
         }
 
@@ -336,36 +410,6 @@ public class Game
             Console.WriteLine($"Теперь у вас {maxAllowedMistakes - mistakes} оставшихся попыток.");
             Console.ReadKey();
         }
-    }
-
-    private bool IsRowFilled(int[,] board, int row)
-    {
-        for (int col = 0; col < 9; col++)
-        {
-            if (board[row, col] == 0) return false;
-        }
-        return true;
-    }
-
-    private bool IsColumnFilled(int[,] board, int col)
-    {
-        for (int row = 0; row < 9; row++)
-        {
-            if (board[row, col] == 0) return false;
-        }
-        return true;
-    }
-
-    private bool IsBoxFilled(int[,] board, int startRow, int startCol)
-    {
-        for (int i = startRow; i < startRow + 3; i++)
-        {
-            for (int j = startCol; j < startCol + 3; j++)
-            {
-                if (board[i, j] == 0) return false;
-            }
-        }
-        return true;
     }
 
     private int GetValidNumber()
