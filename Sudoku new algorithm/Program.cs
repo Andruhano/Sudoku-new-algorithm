@@ -97,47 +97,47 @@ public class Game : IGame
     }
 
     public void StartGame()
+{
+    Console.Clear();
+    Console.WriteLine("Выберите уровень сложности:");
+    Console.WriteLine("1. Простая");
+    Console.WriteLine("2. Средняя");
+    Console.WriteLine("3. Сложная");
+
+    string choice = "";
+    while (true)
     {
-        Console.Clear();
-        Console.WriteLine("Выберите уровень сложности:");
-        Console.WriteLine("1. Простая");
-        Console.WriteLine("2. Средняя");
-        Console.WriteLine("3. Сложная");
+        choice = Console.ReadLine()?.Trim();  // Считываем и убираем пробелы
 
-        string choice = "";
-        while (true)
-        {
-            choice = Console.ReadLine()?.Trim();  // Считываем и убираем пробелы
+        if (choice == "1" || choice == "2" || choice == "3")
+            break;
 
-            if (choice == "1" || choice == "2" || choice == "3")
-                break;
-
-            Console.WriteLine("Неверный выбор. Пожалуйста, введите 1, 2 или 3.");
-        }
-
-        // Устанавливаем сложность на основе выбора
-        difficulty = choice switch
-        {
-            "1" => "Простая",
-            "2" => "Средняя",
-            "3" => "Сложная",
-            _ => throw new InvalidOperationException("Неверный выбор сложности.")  // Это не должно случиться
-        };
-
-        try
-        {
-            originalBoard = _boardGenerator.GenerateSudoku(choice);  // Генерация доски
-            currentBoard = (int[,])originalBoard.Clone();  // Копируем доску для игры
-            PlaySudoku(currentBoard);  // Запуск игры
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Ошибка при запуске игры: {ex.Message}");
-            Console.WriteLine("Нажмите любую клавишу, чтобы вернуться в меню.");
-            Console.ReadKey();
-            MainMenu();  // Возврат в главное меню при ошибке
-        }
+        Console.WriteLine("Неверный выбор. Пожалуйста, введите 1, 2 или 3.");
     }
+
+    // Устанавливаем сложность на основе выбора
+    difficulty = choice switch
+    {
+        "1" => "Простая",
+        "2" => "Средняя",
+        "3" => "Сложная",
+        _ => throw new InvalidOperationException("Неверный выбор сложности.")  // Это не должно случиться
+    };
+
+    try
+    {
+        originalBoard = _boardGenerator.GenerateSudoku(choice);  // Генерация доски
+        currentBoard = (int[,])originalBoard.Clone();  // Копируем доску для игры
+        PlaySudoku(currentBoard);  // Запуск игры
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Ошибка при запуске игры: {ex.Message}");
+        Console.WriteLine("Нажмите любую клавишу, чтобы вернуться в меню.");
+        Console.ReadKey();
+        MainMenu();  // Возврат в главное меню при ошибке
+    }
+}
 
     public class BoardGenerator : IBoardGenerator
     {
@@ -375,34 +375,62 @@ public class Game : IGame
         if (!File.Exists("results.txt"))
         {
             Console.WriteLine("Нет данных о прохождениях.");
-            Console.WriteLine("\nНажмите любую клавишу для возврата в меню.");
-            Console.ReadKey();
             return;
         }
 
         var results = File.ReadAllLines("results.txt")
             .Select(line => line.Split('|').Select(part => part.Trim()).ToArray())
-            .Where(parts => parts.Length == 3) // Проверка на корректность данных
             .Select(parts => new
             {
                 Difficulty = parts[0],
-                Time = ParseTime(parts[1]),
+                TimeInSeconds = ParseTimeToSeconds(parts[1]),
+                FormattedTime = parts[1],
                 Date = parts[2]
             })
             .GroupBy(r => r.Difficulty)
-            .Select(g => new { Difficulty = g.Key, TopResults = g.OrderBy(r => r.Time).Take(3) });
+            .Select(g => new { Difficulty = g.Key, TopResults = g.OrderBy(r => r.TimeInSeconds).Take(3) });
 
         foreach (var difficultyGroup in results)
         {
+            SetDifficultyColor(difficultyGroup.Difficulty);  // Устанавливаем цвет для сложности
             Console.WriteLine($"\nТоп-3 прохождений для сложности: {difficultyGroup.Difficulty}");
+            Console.ResetColor();  // Сбрасываем цвет к стандартному
+
             foreach (var result in difficultyGroup.TopResults)
             {
-                Console.WriteLine($"Время: {result.Time.Minutes} мин {result.Time.Seconds} сек | Дата: {result.Date}");
+                Console.WriteLine($"Время: {result.FormattedTime} | Дата: {result.Date}");
             }
         }
 
         Console.WriteLine("\nНажмите любую клавишу для возврата в меню.");
         Console.ReadKey();
+    }
+
+    private void SetDifficultyColor(string difficulty)
+    {
+        switch (difficulty)
+        {
+            case "Простая":
+                Console.ForegroundColor = ConsoleColor.Green;
+                break;
+            case "Средняя":
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                break;
+            case "Сложная":
+                Console.ForegroundColor = ConsoleColor.Red;
+                break;
+            default:
+                Console.ResetColor();
+                break;
+        }
+    }
+
+    private int ParseTimeToSeconds(string formattedTime)
+    {
+        var parts = formattedTime.Split(' ');
+        int minutes = int.Parse(parts[0]);
+        int seconds = int.Parse(parts[2]);
+        return minutes * 60 + seconds;
     }
 
     private TimeSpan ParseTime(string timeString)
