@@ -69,7 +69,7 @@ public class Game : IGame
                     DeveloperInfo();
                     break;
                 case "3":
-                    DisplayTop3Results(); 
+                    DisplayTop3Results();
                     break;
                 case "4":
                     ExitGame();
@@ -104,10 +104,19 @@ public class Game : IGame
         Console.WriteLine("2. Средняя");
         Console.WriteLine("3. Сложная");
 
-        string difficulty = Console.ReadLine();
-        originalBoard = _boardGenerator.GenerateSudoku(difficulty); // Generate the Sudoku board based on difficulty
-        currentBoard = (int[,])originalBoard.Clone(); // Clone original board for gameplay
-        PlaySudoku(currentBoard); // Pass the current board to PlaySudoku
+        string choice = Console.ReadLine();
+
+        difficulty = choice switch
+        {
+            "1" => "Простая",
+            "2" => "Средняя",
+            "3" => "Сложная",
+            _ => throw new ArgumentException("Неверный выбор сложности.")
+        };
+
+        originalBoard = _boardGenerator.GenerateSudoku(choice);
+        currentBoard = (int[,])originalBoard.Clone();
+        PlaySudoku(currentBoard);
     }
 
     public class BoardGenerator : IBoardGenerator
@@ -315,8 +324,11 @@ public class Game : IGame
                 Console.Clear();
                 PrintBoard(board);
 
-                Console.WriteLine($"Поздравляем! Вы прошли игру за {timer.Elapsed.TotalSeconds} секунд с {mistakes} ошибками.");
-                SaveResult(difficulty, timer.Elapsed.TotalSeconds);
+                TimeSpan timeSpan = timer.Elapsed;
+                string formattedTime = $"{(int)timeSpan.TotalMinutes} мин {timeSpan.Seconds} сек";
+
+                Console.WriteLine($"Поздравляем! Вы прошли игру за {formattedTime} с {mistakes} ошибками.");
+                SaveResult(difficulty, formattedTime); // Передаем сложность
                 Console.ReadKey();
                 MainMenu();
             }
@@ -324,14 +336,16 @@ public class Game : IGame
 
         Console.WriteLine($"Конец игры! Вы допустили {maxAllowedMistakes} ошибки.");
         timer.Stop();
-        Console.WriteLine($"Время: {timer.Elapsed.TotalSeconds} секунд.");
+        TimeSpan totalTime = timer.Elapsed;
+        string totalFormattedTime = string.Format("{0} мин {1} сек", (int)totalTime.TotalMinutes, totalTime.Seconds);
+        Console.WriteLine($"Время: {totalFormattedTime}.");
         Console.ReadKey();
         MainMenu();
     }
 
-    private void SaveResult(string difficulty, double time)
+    private void SaveResult(string difficulty, string time)
     {
-        string result = $"{difficulty} | {time:F2} | {DateTime.Now}";
+        string result = $"{difficulty} | {time} | {DateTime.Now}";
         File.AppendAllText("results.txt", result + Environment.NewLine);
         Console.WriteLine("Результат сохранен.");
     }
@@ -341,12 +355,20 @@ public class Game : IGame
         if (!File.Exists("results.txt"))
         {
             Console.WriteLine("Нет данных о прохождениях.");
+            Console.WriteLine("\nНажмите любую клавишу для возврата в меню.");
+            Console.ReadKey();
             return;
         }
 
         var results = File.ReadAllLines("results.txt")
             .Select(line => line.Split('|').Select(part => part.Trim()).ToArray())
-            .Select(parts => new { Difficulty = parts[0], Time = double.Parse(parts[1]), Date = parts[2] })
+            .Where(parts => parts.Length == 3) // Проверка на корректность данных
+            .Select(parts => new
+            {
+                Difficulty = parts[0],
+                Time = ParseTime(parts[1]),
+                Date = parts[2]
+            })
             .GroupBy(r => r.Difficulty)
             .Select(g => new { Difficulty = g.Key, TopResults = g.OrderBy(r => r.Time).Take(3) });
 
@@ -355,12 +377,25 @@ public class Game : IGame
             Console.WriteLine($"\nТоп-3 прохождений для сложности: {difficultyGroup.Difficulty}");
             foreach (var result in difficultyGroup.TopResults)
             {
-                Console.WriteLine($"Время: {result.Time:F2} сек | Дата: {result.Date}");
+                Console.WriteLine($"Время: {result.Time.Minutes} мин {result.Time.Seconds} сек | Дата: {result.Date}");
             }
         }
 
         Console.WriteLine("\nНажмите любую клавишу для возврата в меню.");
         Console.ReadKey();
+    }
+
+    private TimeSpan ParseTime(string timeString)
+    {
+        // Ожидается формат "X мин Y сек"
+        var parts = timeString.Split(' ');
+        if (parts.Length >= 4 &&
+            int.TryParse(parts[0], out int minutes) &&
+            int.TryParse(parts[2], out int seconds))
+        {
+            return new TimeSpan(0, minutes, seconds);
+        }
+        return TimeSpan.Zero; // Возвращаем 0, если формат неправильный
     }
 
     private int GetValidCoordinate()
@@ -388,7 +423,7 @@ public class Game : IGame
         {
             maxAllowedMistakes++;
             Console.WriteLine("Получена дополнительная попытка за заполнение строки!");
-            extraChanceGiven = true;,
+            extraChanceGiven = true;
         }
 
         if (_boardGenerator.IsColumnFilled(board, col))
