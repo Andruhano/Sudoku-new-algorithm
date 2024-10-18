@@ -13,10 +13,10 @@ public interface IBoardGenerator
 {
     int[,] GenerateSudoku(string difficulty);
     int[,] GenerateFullSudoku();
-    bool IsValidMove(int[,] board, int row, int col, int num); // Добавлен метод
-    bool IsRowFilled(int[,] board, int row); // Добавлен метод
-    bool IsColumnFilled(int[,] board, int col); // Добавлен метод
-    bool IsBoxFilled(int[,] board, int startRow, int startCol); // Добавлен метод
+    bool IsValidMove(int[,] board, int row, int col, int num); 
+    bool IsRowFilled(int[,] board, int row); 
+    bool IsColumnFilled(int[,] board, int col); 
+    bool IsBoxFilled(int[,] board, int startRow, int startCol); 
 }
 
 public class Program
@@ -84,15 +84,15 @@ public class Game : IGame
     private void DeveloperInfo()
     {
         Console.Clear();
-        Console.WriteLine("Разработчик: Ваше Имя");
-        Console.WriteLine("Игра разработана для проекта по программированию.");
-        Console.WriteLine("\nНажмите любую клавишу, чтобы вернуться в меню.");
+        Console.WriteLine("Разработчик: Михайленко Андрей, П26");
+        Console.WriteLine("Игра разработана для проекта по программированию на C#");
+        Console.WriteLine("\nНажмите любую клавишу, чтобы вернуться в меню");
         Console.ReadKey();
     }
 
     private void ExitGame()
     {
-        Console.WriteLine("Спасибо за игру! До свидания.");
+        Console.WriteLine("Спасибо за игру! Удачи!");
         Environment.Exit(0);
     }
 
@@ -104,19 +104,39 @@ public class Game : IGame
         Console.WriteLine("2. Средняя");
         Console.WriteLine("3. Сложная");
 
-        string choice = Console.ReadLine();
+        string choice = "";
+        while (true)
+        {
+            choice = Console.ReadLine()?.Trim();  // Считываем и убираем пробелы
 
+            if (choice == "1" || choice == "2" || choice == "3")
+                break;
+
+            Console.WriteLine("Неверный выбор. Пожалуйста, введите 1, 2 или 3.");
+        }
+
+        // Устанавливаем сложность на основе выбора
         difficulty = choice switch
         {
             "1" => "Простая",
             "2" => "Средняя",
             "3" => "Сложная",
-            _ => throw new ArgumentException("Неверный выбор сложности.")
+            _ => throw new InvalidOperationException("Неверный выбор сложности.")  // Это не должно случиться
         };
 
-        originalBoard = _boardGenerator.GenerateSudoku(choice);
-        currentBoard = (int[,])originalBoard.Clone();
-        PlaySudoku(currentBoard);
+        try
+        {
+            originalBoard = _boardGenerator.GenerateSudoku(choice);  // Генерация доски
+            currentBoard = (int[,])originalBoard.Clone();  // Копируем доску для игры
+            PlaySudoku(currentBoard);  // Запуск игры
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка при запуске игры: {ex.Message}");
+            Console.WriteLine("Нажмите любую клавишу, чтобы вернуться в меню.");
+            Console.ReadKey();
+            MainMenu();  // Возврат в главное меню при ошибке
+        }
     }
 
     public class BoardGenerator : IBoardGenerator
